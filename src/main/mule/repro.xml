@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking"
+    xmlns:bti="http://www.mulesoft.org/schema/mule/ee/bti"
+    xmlns:spring="http://www.mulesoft.org/schema/mule/spring"
+    xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+    xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/spring http://www.mulesoft.org/schema/mule/spring/current/mule-spring.xsd
+http://www.mulesoft.org/schema/mule/ee/bti http://www.mulesoft.org/schema/mule/ee/bti/current/mule-bti-ee.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+
+    <jms:config name="SolaceConfig" doc:name="JMS Config"
+        doc:id="4b399e9d-35c6-4ac3-aadf-f93d28c34ab0">
+        <jms:generic-connection>
+            <jms:caching-strategy>
+                <jms:no-caching />
+            </jms:caching-strategy>
+            <jms:connection-factory>
+                <jms:jndi-connection-factory
+                    connectionFactoryJndiName="JNDI/CF/Mule">
+                    <jms:custom-jndi-name-resolver>
+                        <jms:simple-jndi-name-resolver
+                            jndiInitialFactory="com.solacesystems.jndi.SolJNDIInitialContextFactory"
+                            jndiProviderUrl="tcp://35.237.69.85:55555">
+                            <jms:jndi-provider-properties>
+                                <jms:jndi-provider-property
+                                    key="java.naming.security.principal" value="admin@default" />
+                                <jms:jndi-provider-property
+                                    key="java.naming.security.credentials" value="admin" />
+                            </jms:jndi-provider-properties>
+                        </jms:simple-jndi-name-resolver>
+                    </jms:custom-jndi-name-resolver>
+                </jms:jndi-connection-factory>
+            </jms:connection-factory>
+        </jms:generic-connection>
+        <jms:producer-config persistentDelivery="true" />
+    </jms:config>
+    <spring:config name="SpringConfig" doc:name="Spring Config" doc:id="df06b1c5-5e5b-4526-95b4-61abe3219e19" files="configs/springBeans.xml" />
+    <jms:config name="SolaceXAConfig" doc:name="JMS Config" doc:id="bd3bba40-97d0-4664-a655-451d5e3f1d61" >
+        <jms:generic-connection connectionFactory="solaceXAConnectionFactory" >
+            <jms:caching-strategy >
+                <jms:no-caching />
+            </jms:caching-strategy>
+        </jms:generic-connection>
+    </jms:config>
+    <bti:transaction-manager doc:name="Bitronix Transaction Manager" doc:id="317ca16d-b9f5-4fe5-a6d7-71d40e9d5b4a" />
+
+    <flow name="consume-and-publish-try-queue-full" doc:id="75d56624-4e11-4489-a554-554812217f30" initialState="started">
+        <jms:listener doc:name="Copy_of_On New Message" doc:id="2c260d16-4265-456f-b94e-dc4c0997317d" config-ref="SolaceXAConfig" destination="test-queue" ackMode="AUTO" numberOfConsumers="1" transactionalAction="ALWAYS_BEGIN" transactionType="XA" primaryNodeOnly="false">
+            <jms:consumer-type>
+                <jms:queue-consumer />
+            </jms:consumer-type>
+        </jms:listener>
+        <logger level="INFO" doc:name="Copy_of_Logger" doc:id="98d10cdd-8605-4f40-84aa-03da57f4ca7a" message="#[message]" />
+        <try doc:name="Try" doc:id="bb8bda63-151f-4ea7-b1a0-865d69b92978" transactionalAction="BEGIN_OR_JOIN" transactionType="XA">
+            <jms:publish doc:name="Copy_of_Publish" doc:id="b4d31a70-52eb-40cd-861b-60ca64053095" config-ref="SolaceXAConfig" destination="final-topic" destinationType="TOPIC" persistentDelivery="true"/>
+            <error-handler >
+                <on-error-continue enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="b51a0694-52f7-46c2-8006-1a497f49374b" >
+                    <logger level="INFO" doc:name="Logger" doc:id="6b3c45f9-561a-4365-ac43-c4ff955430c4" message="********* IN LOGGER **************"/>
+                </on-error-continue>
+            </error-handler>
+        </try>
+        <error-handler >
+            <on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="f73275ec-8315-4b70-baf9-bd3ce35c0c73" >
+                <logger level="INFO" doc:name="Logger" doc:id="545db2b0-64ff-4efe-bfc0-18300bf66ec9" />
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+
+    <flow name="consume-and-publish-try-queue-shutdown" doc:id="d971641e-c23f-4d88-a5ad-1e5c6e07f465" initialState="stopped">
+        <jms:listener doc:name="Copy_of_On New Message" doc:id="ae58eddb-671d-4e37-80a4-40850ba1d722" config-ref="SolaceXAConfig" destination="test-queue" ackMode="AUTO" numberOfConsumers="1" transactionalAction="ALWAYS_BEGIN" transactionType="XA" primaryNodeOnly="false">
+            <jms:consumer-type>
+                <jms:queue-consumer />
+            </jms:consumer-type>
+        </jms:listener>
+        <logger level="INFO" doc:name="Copy_of_Logger" doc:id="22fd8bfd-dc5c-4813-b04a-bf72ae9c702c" message="#[message]" />
+        <try doc:name="Try" doc:id="be271bb8-32b4-451b-a05d-2463f2c6edf1" transactionalAction="BEGIN_OR_JOIN" transactionType="XA">
+            <jms:publish doc:name="Copy_of_Publish" doc:id="c2b4c006-3b72-40e2-bd20-032f9fa86aa4" config-ref="SolaceXAConfig" destination="shutdown-queue" destinationType="QUEUE" persistentDelivery="true"/>
+            <error-handler >
+                <on-error-continue enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="57d152a6-f0cf-48ea-bece-011a38bdf433" >
+                    <logger level="INFO" doc:name="Logger" doc:id="0d9e6028-5cf6-435c-8cd9-b1c607373f84" message="********* IN LOGGER **************"/>
+                </on-error-continue>
+            </error-handler>
+        </try>
+        <error-handler >
+            <on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="e91bdcdc-ecba-4191-bf0c-7367869e73b3" >
+                <logger level="INFO" doc:name="Logger" doc:id="2f718a96-c4a5-4149-9f11-cc030231dd75" />
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+
+
+
+    <flow name="load-generator" doc:id="d3a5b05b-939e-4203-a0a4-e6ffc50e9c4e" initialState="started">
+        <scheduler doc:name="Scheduler" doc:id="9a67ad1f-90ca-41bd-b851-c8cc781fba50" >
+            <scheduling-strategy >
+                <fixed-frequency frequency="60" timeUnit="SECONDS"/>
+            </scheduling-strategy>
+        </scheduler>
+        <set-payload value="#[now()]" doc:name="Set Payload" doc:id="10809f55-7be2-4b5d-9278-aae395da4a82" />
+        <jms:publish doc:name="Publish" doc:id="7777907c-fbb3-462b-9ab4-215a4e52be5f" config-ref="SolaceConfig" destination="test-topic" persistentDelivery="true" destinationType="TOPIC" />
+    </flow>
+
+
+    
+
+</mule>
